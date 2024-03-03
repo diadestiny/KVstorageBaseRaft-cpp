@@ -31,6 +31,7 @@ include_directories(${PROJECT_SOURCE_DIR}/src/skipList/include)
 # 设置项目库文件搜索路径 -L
 link_directories(${PROJECT_SOURCE_DIR}/lib)
 
+# 在构建时，CMake 会进入 src 目录并执行其下的 CMakeLists.txt 文件
 # src包含了所有的相关代码
 add_subdirectory(src)
 # example包含了使用的示例代码

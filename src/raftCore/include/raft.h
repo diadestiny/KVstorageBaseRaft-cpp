@@ -34,11 +34,11 @@ constexpr int Normal = 3;
 class Raft : public raftRpcProctoc::raftRpc {
  private:
   std::mutex m_mtx;
-  std::vector<std::shared_ptr<RaftRpcUtil>> m_peers;
-  std::shared_ptr<Persister> m_persister;
-  int m_me;
-  int m_currentTerm;
-  int m_votedFor;
+  std::vector<std::shared_ptr<RaftRpcUtil>> m_peers; //需要与其他raft节点通信，这里保存与其他结点通信的rpc入口
+  std::shared_ptr<Persister> m_persister; //持久化层，负责raft数据的持久化
+  int m_me; //raft是以集群启动，这个用来标识自己的的编号
+  int m_currentTerm; //记录当前的term
+  int m_votedFor; //记录当前term给谁投票过
   std::vector<raftRpcProctoc::LogEntry> m_logs;  //// 日志条目数组，包含了状态机要执行的指令集，以及收到领导时的任期号
                                                  // 这两个状态所有结点都在维护，易失
   int m_commitIndex;
@@ -56,7 +56,6 @@ class Raft : public raftRpcProctoc::raftRpc {
   // ApplyMsgQueue chan ApplyMsg // raft内部使用的chan，applyChan是用于和服务层交互，最后好像没用上
 
   // 选举超时
-
   std::chrono::_V2::system_clock::time_point m_lastResetElectionTime;
   // 心跳超时，用于leader
   std::chrono::_V2::system_clock::time_point m_lastResetHearBeatTime;
