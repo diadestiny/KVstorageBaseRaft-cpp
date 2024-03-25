@@ -8,14 +8,17 @@ option cc_generic_services = true;  //开启stub服务
 // 日志实体
 message LogEntry{
     bytes Command  =1;
-	int32 LogTerm   =2;
-	int32 LogIndex  = 3;
+	int32 LogTerm   =2; //任期号
+	int32 LogIndex  = 3; //日志号
 }
+
+
+// AppendEntriesArgs: 用于定义AppendEntries RPC调用的参数，这是Raft协议中leader复制日志条目到follower的过程，也用作心跳检测。
 // AppendEntriesArgs 由leader复制log条目，也可以当做是心跳连接，注释中的rf为leader节点
 message AppendEntriesArgs  {
 	//	下面几个参数和论文中相同
-	int32 Term        =1;
-	int32 LeaderId       =2;
+	int32 Term         =1;
+	int32 LeaderId     =2;
 	int32 PrevLogIndex =3;
 	int32 PrevLogTerm  =4;
 	repeated LogEntry Entries  = 5;
@@ -67,25 +70,3 @@ service raftRpc
     rpc InstallSnapshot (InstallSnapshotRequest) returns (InstallSnapshotResponse);
     rpc RequestVote (RequestVoteArgs) returns (RequestVoteReply);
 }
-// message ResultCode
-// {
-//     int32 errcode = 1;
-//     bytes errmsg = 2;
-// }
-
-// message GetFriendsListRequest  //请求，响应
-// {
-//     uint32 userid = 1;
-// }
-
-// message GetFriendsListResponse  //请求，响应
-// {
-//     ResultCode result = 1;
-//     repeated bytes friends = 2;
-// }
-
-// // 好友模块
-// service FiendServiceRpc  //具体的服务模块和服务方法
-// {
-//     rpc GetFriendsList(GetFriendsListRequest) returns(GetFriendsListResponse);
-// }

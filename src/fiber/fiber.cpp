@@ -4,16 +4,17 @@
 #include "scheduler.hpp"
 #include "utils.hpp"
 
+// thread_local是一个修饰关键字：每一个线程都有一份不同的变量(修饰的部分)
+// ⼀个线程在任何时候最多只能知道两个协程的上下⽂。
 namespace monsoon {
 const bool DEBUG = true;
-// 当前线程正在运行的协程
-static thread_local Fiber *cur_fiber = nullptr;
-// 当前线程的主协程
-static thread_local Fiber::ptr cur_thread_fiber = nullptr;
-// 用于生成协程Id
-static std::atomic<uint64_t> cur_fiber_id{0};
-// 统计当前协程数
-static std::atomic<uint64_t> fiber_count{0};
+
+static thread_local Fiber *cur_fiber = nullptr; // 当前线程正在运行的协程
+static thread_local Fiber::ptr cur_thread_fiber = nullptr; // 当前线程的主协程
+
+static std::atomic<uint64_t> cur_fiber_id{0}; // 用于生成协程Id
+static std::atomic<uint64_t> fiber_count{0}; // 统计当前协程数
+
 // 协议栈默认大小 128k
 static int g_fiber_stack_size = 128 * 1024;
 
@@ -22,6 +23,7 @@ class StackAllocator {
   static void *Alloc(size_t size) { return malloc(size); }
   static void Delete(void *vp, size_t size) { return free(vp); }
 };
+
 // only for GetThis
 Fiber::Fiber() {
   SetThis(this);
@@ -33,15 +35,17 @@ Fiber::Fiber() {
   //",backtrace:\n"<< BacktraceToString(6, 3, "") << std::endl;
 }
 
-// 设置当前协程
-void Fiber::SetThis(Fiber *f) { cur_fiber = f; }
+
+void Fiber::SetThis(Fiber *f) { 
+  cur_fiber = f;
+}
+
 // 获取当前执行协程，不存在则创建
 Fiber::ptr Fiber::GetThis() {
   if (cur_fiber) {
     return cur_fiber->shared_from_this();
   }
-  // 创建主协程并初始化
-  Fiber::ptr main_fiber(new Fiber);
+  Fiber::ptr main_fiber(new Fiber); // 创建主协程并初始化
   CondPanic(cur_fiber == main_fiber.get(), "cur_fiber need to be main_fiber");
   cur_thread_fiber = main_fiber;
   return cur_fiber->shared_from_this();
@@ -58,6 +62,10 @@ Fiber::Fiber(std::function<void()> cb, size_t stacksize, bool run_inscheduler)
   ctx_.uc_link = nullptr;
   ctx_.uc_stack.ss_sp = stack_ptr;
   ctx_.uc_stack.ss_size = stackSize_;
+
+  // 设置当前的上下文为ucp，setcontext的上下文ucp应该通过getcontext或者makecontext取得，如果调用成功则不返回。
+  // 如果上下文是通过调用getcontext()取得,程序会继续执行这个调用。如果上下文是通过调用makecontext取得,程序会调用makecontext函数的第二个参数指向的函数，如果func函数返回,
+  // 则恢复makecontext第一个参数指向的上下文第一个参数指向的上下文context_t中指向的uc_link.如果uc_link为NULL,则线程退出。
   makecontext(&ctx_, &Fiber::MainFunc, 0);
 
   // std::cout << "create son fiber , id = " << id_ << ",backtrace:\n"
@@ -81,11 +89,10 @@ void Fiber::resume() {
   }
 }
 
-// 当前协程让出执行权
-// 协程执行完成之后胡会自动yield,回到主协程，此时状态为TEAM
+// 当前协程让出执行权，协程执行完成之后会自动yield,回到主协程，此时状态为TEAM
 void Fiber::yield() {
   CondPanic(state_ == TERM || state_ == RUNNING, "state error");
-  SetThis(cur_thread_fiber.get());
+  SetThis(cur_thread_fiber.get()); //设置运行协程为主协程
   if (state_ != TERM) {
     state_ = READY;
   }
@@ -106,12 +113,12 @@ void Fiber::MainFunc() {
   cur->cb_();
   cur->cb_ = nullptr;
   cur->state_ = TERM;
+
   // 手动使得cur_fiber引用计数减1
   auto raw_ptr = cur.get();
-  cur.reset();
-  // 协程结束，自动yield,回到主协程
-  // 访问原始指针原因：reset后cur已经被释放
-  raw_ptr->yield();
+  // 因为已经执行完cb_(), 当前子协程可以释放了, 所以cur.reset()(置空) 若cur是唯一指向其对象的shared_ptr，reset会释放此对象。
+  cur.reset(); 
+  raw_ptr->yield(); // 协程结束，自动yield,回到主协程 (访问原始指针原因：reset后cur已经被释放)
 }
 
 // 协程重置（复用已经结束的协程，复用其栈空间，创建新协程）

@@ -1,8 +1,4 @@
 
-# ${src_raftRpcPro}
-
-
-
 # 获取当前源文件所在目录的绝对路径
 get_filename_component(SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}" ABSOLUTE)
 

@@ -44,9 +44,9 @@ class Raft : public raftRpcProctoc::raftRpc {
   int m_commitIndex;
   int m_lastApplied;  // 已经汇报给状态机（上层应用）的log 的index
 
-  // 这两个状态是由服务器来维护，易失
+  // 这两个状态是由leader(服务器)来维护，易失
   std::vector<int>
-      m_nextIndex;  // 这两个状态的下标1开始，因为通常commitIndex和lastApplied从0开始，应该是一个无效的index，因此下标从1开始
+      m_nextIndex;  // 这两个状态的下标从1开始，因为通常commitIndex和lastApplied从0开始，应该是一个无效的index，因此下标从1开始
   std::vector<int> m_matchIndex;
   enum Status { Follower, Candidate, Leader };
   // 身份
@@ -69,10 +69,10 @@ class Raft : public raftRpcProctoc::raftRpc {
   std::unique_ptr<monsoon::IOManager> m_ioManager = nullptr;
 
  public:
-  void AppendEntries1(const raftRpcProctoc::AppendEntriesArgs *args, raftRpcProctoc::AppendEntriesReply *reply);
-  void applierTicker();
-  bool CondInstallSnapshot(int lastIncludedTerm, int lastIncludedIndex, std::string snapshot);
-  void doElection();
+  void AppendEntries1(const raftRpcProctoc::AppendEntriesArgs *args, raftRpcProctoc::AppendEntriesReply *reply); //日志同步 + 心跳 rpc ，重点关注
+  void applierTicker(); //定期向状态机写入日志，非重点函数
+  bool CondInstallSnapshot(int lastIncludedTerm, int lastIncludedIndex, std::string snapshot); //快照相关，非重点
+  void doElection();  //发起选举
   /**
    * \brief 发起心跳，只有leader才需要发起心跳
    */

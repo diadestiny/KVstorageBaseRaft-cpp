@@ -1,5 +1,5 @@
 
-# 获取当前源文件所在目录的绝对路径
+# 获取当前源文件所在目录的绝对路径,存到SRC_DIR变量
 get_filename_component(SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}" ABSOLUTE)
 
 # 将该目录下所有源文件添加到 SRC_LIST 变量中

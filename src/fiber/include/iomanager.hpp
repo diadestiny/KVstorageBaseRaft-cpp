@@ -20,6 +20,7 @@ struct EventContext {
   std::function<void()> cb;
 };
 
+// 三元组(fd, event, callback)
 class FdContext {
   friend class IOManager;
 
@@ -32,10 +33,10 @@ class FdContext {
   void triggerEvent(Event event);
 
  private:
-  EventContext read;
-  EventContext write;
-  int fd = 0;
-  Event events = NONE;
+  EventContext read; //读事件
+  EventContext write; //写事件
+  int fd = 0; //事件关联的句柄
+  Event events = NONE; //已经注册的事件
   Mutex mutex;
 };
 

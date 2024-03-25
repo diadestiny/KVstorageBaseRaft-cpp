@@ -64,78 +64,95 @@ struct timer_info {
   int cnacelled = 0;
 };
 
+// 模板函数do_io，执行I/O操作，可处理非阻塞和超时。它接受一个I/O函数、相关参数和超时设置。
 template <typename OriginFun, typename... Args>
-static ssize_t do_io(int fd, OriginFun fun, const char *hook_fun_name, uint32_t event, int timeout_so, Args &&...args) {
+static ssize_t do_io(int fd, // 文件描述符
+                     OriginFun fun, // 要执行的原始I/O函数
+                     const char *hook_fun_name, // 被钩子函数拦截的函数名，用于调试/日志
+                     uint32_t event, // 事件类型，用于非阻塞操作的事件监听
+                     int timeout_so, // 超时类型（SO_RCVTIMEO, SO_SNDTIMEO等）
+                     Args &&...args) { // 原始I/O函数的参数
+  // 如果钩子未启用，则直接调用原始函数
   if (!t_hook_enable) {
     return fun(fd, std::forward<Args>(args)...);
   }
-  // 为当前文件描述符创建上下文ctx
+
+  // 尝试从文件描述符管理器获取当前文件描述符的上下文
   FdCtx::ptr ctx = FdMgr::GetInstance()->get(fd);
+  // 如果上下文不存在，直接调用原始函数
   if (!ctx) {
     return fun(fd, std::forward<Args>(args)...);
   }
-  // 文件已经关闭
+
+  // 如果文件已经关闭，则设置errno并返回错误
   if (ctx->isClose()) {
     errno = EBADF;
     return -1;
   }
 
+  // 如果文件描述符不是套接字或用户已设置非阻塞，直接调用原始函数
   if (!ctx->isSocket() || ctx->getUserNonblock()) {
     return fun(fd, std::forward<Args>(args)...);
   }
-  // 获取对应type的fd超时时间
+
+  // 获取文件描述符的超时时间
   uint64_t to = ctx->getTimeout(timeout_so);
   std::shared_ptr<timer_info> tinfo(new timer_info);
 
 retry:
+  // 尝试执行原始I/O函数
   ssize_t n = fun(fd, std::forward<Args>(args)...);
+  // 如果操作因信号中断而失败，重试
   while (n == -1 && errno == EINTR) {
-    // 读取操作被信号中断，继续尝试
     n = fun(fd, std::forward<Args>(args)...);
   }
+  // 如果数据未就绪（EAGAIN），则进入非阻塞等待流程
   if (n == -1 && errno == EAGAIN) {
-    // 数据未就绪
-    IOManager *iom = IOManager::GetThis();
+    IOManager *iom = IOManager::GetThis(); // 获取I/O管理器实例
     Timer::ptr timer;
     std::weak_ptr<timer_info> winfo(tinfo);
 
+    // 如果设置了超时，则创建一个定时器
     if (to != (uint64_t)-1) {
       timer = iom->addConditionTimer(
           to,
+          // 超时回调函数
           [winfo, fd, iom, event]() {
             auto t = winfo.lock();
-            if (!t || t->cnacelled) {
-              return;
-            }
+            if (!t || t->cnacelled) return;
             t->cnacelled = ETIMEDOUT;
             iom->cancelEvent(fd, (Event)(event));
           },
           winfo);
     }
 
+    // 将文件描述符添加到I/O事件监听
     int rt = iom->addEvent(fd, (Event)(event));
     if (rt) {
+      // 添加事件失败，打印错误，取消定时器，返回错误
       std::cout << hook_fun_name << " addEvent(" << fd << ", " << event << ")";
       if (timer) {
         timer->cancel();
       }
       return -1;
     } else {
+      // 暂停当前协程，等待事件或超时
       Fiber::GetThis()->yield();
       if (timer) {
         timer->cancel();
       }
+      // 检查是否因超时被取消
       if (tinfo->cnacelled) {
         errno = tinfo->cnacelled;
         return -1;
       }
+      // 未超时，重试I/O操作
       goto retry;
     }
   }
-
-  return n;
 }
 
+ 
 extern "C" {
 #define XX(name) name##_fun name##_f = nullptr;
 HOOK_FUN(XX);
@@ -156,7 +173,7 @@ unsigned int sleep(unsigned int seconds) {
   Fiber::ptr fiber = Fiber::GetThis();
   IOManager *iom = IOManager::GetThis();
   iom->addTimer(seconds * 1000,
-                std::bind((void(Scheduler::*)(Fiber::ptr, int thread)) & IOManager::scheduler, iom, fiber, -1));
+                std::bind((void(Scheduler::*)(Fiber::ptr, int thread)) &IOManager::scheduler, iom, fiber, -1));
   Fiber::GetThis()->yield();
   return 0;
 }
@@ -165,17 +182,17 @@ int usleep(useconds_t usec) {
   // std::cout << "HOOK USLEEP START" << std::endl;
   if (!t_hook_enable) {
     // 不允许hook,则直接使用系统调用
-    // std::cout << "THIS THREAD NOT ALLOW HOOK" << std::endl;
     auto ret = usleep_f(usec);
-    // std::cout << "THIS THREAD WAKE UP" << std::endl;
     return 0;
   }
   // std::cout << "HOOK USLEEP REAL START" << std::endl;
   // 允许hook,则直接让当前协程退出，seconds秒后再重启（by定时器）
   Fiber::ptr fiber = Fiber::GetThis();
   IOManager *iom = IOManager::GetThis();
+  // 这段代码中使用了C++的强制类型转换，将 &IOManager::scheduler 
+  // 转换为一个特定类型的成员函数指针。转换的目标类型是 (void(Scheduler::*)(Fiber::ptr, int thread)) 函数指针
   iom->addTimer(usec / 1000,
-                std::bind((void(Scheduler::*)(Fiber::ptr, int thread)) & IOManager::scheduler, iom, fiber, -1));
+                std::bind((void(Scheduler::*)(Fiber::ptr, int thread)) &IOManager::scheduler, iom, fiber, -1));
   Fiber::GetThis()->yield();
   return 0;
 }

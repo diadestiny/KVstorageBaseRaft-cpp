@@ -9,6 +9,10 @@
 namespace monsoon {
 class TimerManager;
 
+// 不使用 std::enable_shared_from_this，如果你尝试在成员函数内部创建一个指向当前对象的 std::shared_ptr
+// （例如，通过 std::shared_ptr<T>(this)），你将会结束于创建一个完全独立的 std::shared_ptr 实例。
+// 这个新创建的 std::shared_ptr 将拥有自己的引用计数，与外界可能已存在的指向该对象的 std::shared_ptr 完全独立。
+// 这种情况下，当引用计数错误地管理时，可能会导致对象被过早销毁或多次销毁。
 class Timer : public std::enable_shared_from_this<Timer> {
   friend class TimerManager;
 
@@ -39,6 +43,7 @@ class Timer : public std::enable_shared_from_this<Timer> {
     bool operator()(const Timer::ptr &lhs, const Timer::ptr &rhs) const;
   };
 };
+
 
 class TimerManager {
   friend class Timer;

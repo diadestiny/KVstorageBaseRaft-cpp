@@ -20,14 +20,16 @@ bool Timer::Comparator::operator()(const Timer::ptr &lhs, const Timer::ptr &rhs)
   }
   return lhs.get() < rhs.get();
 }
+
 Timer::Timer(uint64_t ms, std::function<void()> cb, bool recuring, TimerManager *manager)
     : recurring_(recuring), ms_(ms), cb_(cb), manager_(manager) {
   next_ = GetElapsedMS() + ms_;
 }
 Timer::Timer(uint64_t next) : next_(next) {}
+
 bool Timer::cancel() {
-  RWMutex::WriteLock lock(manager_->mutex_);
-  if (cb_) {
+  RWMutex::WriteLock lock(manager_->mutex_); //加 写锁
+  if (cb_) { //如果存在定时任务
     cb_ = nullptr;
     auto it = manager_->timers_.find(shared_from_this());
     manager_->timers_.erase(it);
@@ -37,15 +39,15 @@ bool Timer::cancel() {
 }
 bool Timer::refresh() {
   RWMutex::RWMutex::WriteLock lock(manager_->mutex_);
-  if (!cb_) {
+  if (!cb_) { //先判断有无任务要刷新
     return false;
   }
   auto it = manager_->timers_.find(shared_from_this());
   if (it == manager_->timers_.end()) {
     return false;
   }
-  manager_->timers_.erase(it);
-  next_ = GetElapsedMS() + ms_;
+  manager_->timers_.erase(it); //从最小堆set里面删除
+  next_ = GetElapsedMS() + ms_; //计算开始时间, 重新加入manager
   manager_->timers_.insert(shared_from_this());
   return true;
 }
@@ -90,7 +92,7 @@ Timer::ptr TimerManager::addTimer(uint64_t ms, std::function<void()> cb, bool re
 }
 
 static void OnTimer(std::weak_ptr<void> weak_cond, std::function<void()> cb) {
-  std::shared_ptr<void> tmp = weak_cond.lock();
+  std::shared_ptr<void> tmp = weak_cond.lock(); //返回 指向共享对象的shared_ptr
   if (tmp) {
     cb();
   }
@@ -98,6 +100,7 @@ static void OnTimer(std::weak_ptr<void> weak_cond, std::function<void()> cb) {
 
 Timer::ptr TimerManager::addConditionTimer(uint64_t ms, std::function<void()> cb, std::weak_ptr<void> weak_cond,
                                            bool recurring) {
+  // std::bind(&OnTimer, weak_cond, cb) 是回调函数, 类型是function<void()>
   return addTimer(ms, std::bind(&OnTimer, weak_cond, cb), recurring);
 }
 
