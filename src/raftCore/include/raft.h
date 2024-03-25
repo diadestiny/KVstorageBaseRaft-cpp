@@ -94,6 +94,7 @@ class Raft : public raftRpcProctoc::raftRpc {
   void RequestVote(const raftRpcProctoc::RequestVoteArgs *args, raftRpcProctoc::RequestVoteReply *reply);
   bool UpToDate(int index, int term);
   int getLastLogIndex();
+  int getLastLogTerm();
   void getLastLogIndexAndTerm(int *lastLogIndex, int *lastLogTerm);
   int getLogTermFromLogIndex(int logIndex);
   int GetRaftStateSize();
