@@ -32,7 +32,6 @@ Fiber::Fiber() {
   ++fiber_count;
   id_ = cur_fiber_id++;
   std::cout << "[fiber] create fiber , id = " << id_ << std::endl;
-  //",backtrace:\n"<< BacktraceToString(6, 3, "") << std::endl;
 }
 
 
