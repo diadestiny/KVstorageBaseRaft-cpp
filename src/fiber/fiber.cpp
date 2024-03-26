@@ -63,14 +63,7 @@ Fiber::Fiber(std::function<void()> cb, size_t stacksize, bool run_inscheduler)
   ctx_.uc_stack.ss_sp = stack_ptr;
   ctx_.uc_stack.ss_size = stackSize_;
 
-  // 设置当前的上下文为ucp，setcontext的上下文ucp应该通过getcontext或者makecontext取得，如果调用成功则不返回。
-  // 如果上下文是通过调用getcontext()取得,程序会继续执行这个调用。如果上下文是通过调用makecontext取得,程序会调用makecontext函数的第二个参数指向的函数，如果func函数返回,
-  // 则恢复makecontext第一个参数指向的上下文第一个参数指向的上下文context_t中指向的uc_link.如果uc_link为NULL,则线程退出。
   makecontext(&ctx_, &Fiber::MainFunc, 0);
-
-  // std::cout << "create son fiber , id = " << id_ << ",backtrace:\n"
-  //           << BacktraceToString(6, 3, "") << std::endl;
-  // std::cout << "[fiber]create son fiber , id = " << id_ << std::endl;
 }
 
 // 切换当前协程到执行态,并保存主协程的上下文
