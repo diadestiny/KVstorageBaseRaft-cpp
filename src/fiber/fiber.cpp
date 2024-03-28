@@ -62,7 +62,7 @@ Fiber::Fiber(std::function<void()> cb, size_t stacksize, bool run_inscheduler)
   ctx_.uc_stack.ss_sp = stack_ptr;
   ctx_.uc_stack.ss_size = stackSize_;
 
-  makecontext(&ctx_, &Fiber::MainFunc, 0);
+  makecontext(&ctx_, &Fiber::MainFunc, 0); //传递函数指针，绑定协程入口
 }
 
 // 切换当前协程到执行态,并保存主协程的上下文

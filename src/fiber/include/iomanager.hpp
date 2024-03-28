@@ -21,6 +21,7 @@ struct EventContext {
 };
 
 // 三元组(fd, event, callback)
+// IO协程调度支持为描述符注册可读和可写事件的回调函数
 class FdContext {
   friend class IOManager;
 
@@ -39,6 +40,7 @@ class FdContext {
   Event events = NONE; //已经注册的事件
   Mutex mutex;
 };
+
 
 class IOManager : public Scheduler, public TimerManager {
  public:

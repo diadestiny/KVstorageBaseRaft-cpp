@@ -14,7 +14,7 @@
 #include "utils.hpp"
 
 namespace monsoon {
-// 调度任务
+// 调度任务（支持协程类和普通函数(仿函数类型)）
 class SchedulerTask {
  public:
   // 允许Scheduler类访问SchedulerTask的私有成员
@@ -74,8 +74,7 @@ class Scheduler {
     bool isNeedTickle = false;
     {
       Mutex::Lock lock(mutex_);
-      isNeedTickle = schedulerNoLock(task, thread);
-      // std::cout << "isNeedTickle: " << isNeedTickle << std::endl;
+      isNeedTickle = schedulerNoLock(task, thread); //指定线程thread运行task
     }
 
     if (isNeedTickle) {
@@ -91,7 +90,7 @@ class Scheduler {
   // 通知调度器任务到达
   virtual void tickle();
   /**
-   * \brief  协程调度函数,
+   * \brief  协程调度函数, 核心函数
    * 默认会启用hook
    */
   void run();
@@ -105,8 +104,7 @@ class Scheduler {
   bool isHasIdleThreads() { return idleThreadCnt_ > 0; }
 
  private:
-  // 无锁下，添加调度任务
-  // todo 可以加入使用clang的锁检查
+  // 无锁下，添加调度任务到任务队列中，todo 可以加入使用clang的锁检查
   template <class TaskType>
   bool schedulerNoLock(TaskType t, int thread) {
     bool isNeedTickle = tasks_.empty();

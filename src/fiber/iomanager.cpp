@@ -19,12 +19,13 @@ void FdContext::resetEveContext(EventContext &ctx) {
   ctx.fiber.reset();
   ctx.cb = nullptr;
 }
-// 触发事件（只是将对应的fiber or cb 加入scheduler tasklist）
+// 触发事件后,协程会重新resume(加入scheduler)
 void FdContext::triggerEvent(Event event) {
   CondPanic(events & event, "event hasn't been registed");
   events = (Event)(events & ~event);
   EventContext &ctx = getEveContext(event);
-  if (ctx.cb) {
+  // 外部逻辑中注册完就yield了，触发事件resume（自我管理，重新放到任务队列里面去）
+  if (ctx.cb) { 
     ctx.scheduler->scheduler(ctx.cb);
   } else {
     ctx.scheduler->scheduler(ctx.fiber);
@@ -35,6 +36,8 @@ void FdContext::triggerEvent(Event event) {
 
 IOManager::IOManager(size_t threads, bool use_caller, const std::string &name) : Scheduler(threads, use_caller, name) {
   epfd_ = epoll_create(5000);
+
+  // 创建pipe，获取m_tickleFds[2]，其中m_tickleFds[0]是管道的读端，m_tickleFds[1]是管道的写端
   int ret = pipe(tickleFds_);
   CondPanic(ret == 0, "pipe error");
 
@@ -46,7 +49,7 @@ IOManager::IOManager(size_t threads, bool use_caller, const std::string &name) :
   // 边缘触发，设置非阻塞
   ret = fcntl(tickleFds_[0], F_SETFL, O_NONBLOCK);
   CondPanic(ret == 0, "set fd nonblock error");
-  // 注册管道读描述符
+  // 将管道的读描述符加入epoll多路复用，如果管道可读，idle中的epoll_wait会返回
   ret = epoll_ctl(epfd_, EPOLL_CTL_ADD, tickleFds_[0], &event);
   CondPanic(ret == 0, "epoll_ctl error");
 
@@ -55,6 +58,7 @@ IOManager::IOManager(size_t threads, bool use_caller, const std::string &name) :
   // 启动scheduler，开始进行协程调度
   start();
 }
+
 IOManager::~IOManager() {
   stop();
   close(epfd_);
@@ -68,7 +72,15 @@ IOManager::~IOManager() {
   }
 }
 
-// 添加事件
+
+/**
+ * @brief 添加事件
+ * @details fd描述符发生了event事件时执行cb函数
+ * @param[in] fd socket句柄
+ * @param[in] event 事件类型
+ * @param[in] cb 事件回调函数，如果为空，则默认把当前协程作为回调执行体
+ * @return 添加成功返回0,失败返回-1
+ */
 int IOManager::addEvent(int fd, Event event, std::function<void()> cb) {
   FdContext *fd_ctx = nullptr;
   RWMutex::ReadLock lock(mutex_);
@@ -219,30 +231,36 @@ bool IOManager::cancelAll(int fd) {
   CondPanic(fd_ctx->events == 0, "fd not totally clear");
   return true;
 }
+
 IOManager *IOManager::GetThis() { return dynamic_cast<IOManager *>(Scheduler::GetThis()); }
 
-// 通知调度器有任务到来
+/**
+ * @brief 通知调度器有任务要调度
+ * @details 写pipe让idle协程从epoll_wait退出，等idle协程yield之后Scheduler::run就可以调度其他任务
+ * 如果当前没有空闲调度线程，那就没必要发通知
+ */
 void IOManager::tickle() {
   if (!isHasIdleThreads()) {
-    // 此时没有空闲的调度线程
     return;
   }
-  // 写pipe管道，使得idle协程凑够epoll_wait退出，开始调度任务
   int rt = write(tickleFds_[1], "T", 1);
   CondPanic(rt == 1, "write pipe error");
 }
 
-// 调度器无任务则阻塞在idle线程上
-// 当有新事件触发，则退出idle状态，则执行回调函数
-// 当有新的调度任务，则退出idle状态，并执行对应任务
+/**
+ * @brief idle协程
+ * @details 对于IO协程调度来说，应阻塞在等待IO事件上，idle退出的时机是epoll_wait返回，对应的操作是tickle或注册的IO事件就绪
+ * 调度器无调度任务时会阻塞idle协程上，对IO调度器而言，idle状态应该关注两件事，一是有没有新的调度任务，对应Schduler::schedule()，
+ * 如果有新的调度任务，那应该立即退出idle状态，并执行对应的任务；二是关注当前注册的所有IO事件有没有触发，如果有触发，那么应该执行
+ * IO事件对应的回调函数
+ */
 void IOManager::idle() {
-  // 以此最多检测256个就绪事件
+  // 一次epoll_wait最多检测256个就绪事件，如果就绪事件超过了这个数，那么会在下轮epoll_wati继续处理
   const uint64_t MAX_EVENTS = 256;
   epoll_event *events = new epoll_event[MAX_EVENTS]();
   std::shared_ptr<epoll_event> shared_events(events, [](epoll_event *ptr) { delete[] ptr; });
 
   while (true) {
-    // std::cout << "[IOManager] idle begin..." << std::endl;
     //  获取下一个定时器超时时间，同时判断调度器是否已经stop
     uint64_t next_timeout = 0;
     if (stopping(next_timeout)) {
@@ -260,7 +278,7 @@ void IOManager::idle() {
       } else {
         next_timeout = MAX_TIMEOUT;
       }
-      // 阻塞等待事件就绪
+      // 阻塞在epoll_wait上，等待事件发生
       ret = epoll_wait(epfd_, events, MAX_EVENTS, (int)next_timeout);
       // std::cout << "wait..." << std::endl;
       if (ret < 0) {
@@ -271,6 +289,7 @@ void IOManager::idle() {
         std::cout << "epoll_wait [" << epfd_ << "] errno,err: " << errno << std::endl;
         break;
       } else {
+        // 事件成功触发了，跳出循环继续执行
         break;
       }
     } while (true);
@@ -285,14 +304,14 @@ void IOManager::idle() {
       cbs.clear();
     }
 
+    // 遍历所有发生的事件，根据epoll_event的私有指针找到对应的FdContext，进行事件处理
     for (int i = 0; i < ret; i++) {
       epoll_event &event = events[i];
       if (event.data.fd == tickleFds_[0]) {
         // pipe管道内数据无意义，只是tickle意义,读完即可
         uint8_t dummy[256];
         // TODO：ET下阻塞读取可能有问题
-        while (read(tickleFds_[0], dummy, sizeof(dummy)) > 0)
-          ;
+        while (read(tickleFds_[0], dummy, sizeof(dummy)) > 0);
         continue;
       }
 
@@ -318,8 +337,8 @@ void IOManager::idle() {
         continue;
       }
       // 剔除已经发生的事件，将剩余的事件重新加入epoll_wait
-      // issue: 在处理 EPOLLERR 或 EPOLLHUP 事件时，可能需要重新注
-      // 册 EPOLLIN 或 EPOLLOUT 事件，以确保后续的 IO 可以正常进行
+      // 如果剩下的事件为0，表示这个fd已经不需要关注了，直接从epoll中删除
+      // issue: 在处理 EPOLLERR 或 EPOLLHUP 事件时，可能需要重新注册 EPOLLIN 或 EPOLLOUT 事件，以确保后续的 IO 可以正常进行
       int left_events = (fd_ctx->events & ~real_events);
       int op = left_events ? EPOLL_CTL_MOD : EPOLL_CTL_DEL;
       event.events = EPOLLET | left_events;
@@ -329,7 +348,7 @@ void IOManager::idle() {
         std::cout << "epoll_wait [" << epfd_ << "] errno,err: " << errno << std::endl;
         continue;
       }
-      // 处理已就绪事件 （加入scheduler tasklist,未调度执行）
+      // 处理已就绪事件 ，也就是让调度器调度指定的函数或协程
       if (real_events & READ) {
         fd_ctx->triggerEvent(READ);
         --pendingEventCnt_;
@@ -339,8 +358,10 @@ void IOManager::idle() {
         --pendingEventCnt_;
       }
     }
-    // 处理结束，idle协程yield,此时调度协程可以执行run去tasklist中
-    // 检测，拿取新任务去调度
+    /**
+     * 一旦处理完所有的事件，idle协程yield，这样可以让调度协程(Scheduler::run)重新检查是否有新任务要调度
+     * 上面triggerEvent实际也只是把对应的fiber重新加入调度，要执行的话还要等idle协程退出
+     */
     Fiber::ptr cur = Fiber::GetThis();
     auto raw_ptr = cur.get();
     cur.reset();

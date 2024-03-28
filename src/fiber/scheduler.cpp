@@ -27,7 +27,7 @@ Scheduler::Scheduler(size_t threads, bool use_caller, const std::string &name) {
     CondPanic(GetThis() == nullptr, "GetThis err:cur scheduler is not nullptr");
     // 设置当前线程为调度器线程（caller thread）
     cur_scheduler = this;
-    // 初始化当前线程的调度协程 （该线程不会被调度器带哦都），调度结束后，返回主协程
+    // 初始化当前线程的调度协程，调度结束后，返回主协程; 调度协程的函数入口就是Scheduler::run();
     rootFiber_.reset(new Fiber(std::bind(&Scheduler::run, this), 0, false));
     std::cout << LOG_HEAD << "init caller thread's caller fiber success" << std::endl;
 
@@ -52,8 +52,7 @@ Scheduler::~Scheduler() {
   }
 }
 
-// 调度器启动
-// 初始化调度线程池
+// 调度器启动：初始化调度线程池
 void Scheduler::start() {
   std::cout << LOG_HEAD << "scheduler start" << std::endl;
   Mutex::Lock lock(mutex_);
@@ -64,6 +63,7 @@ void Scheduler::start() {
   CondPanic(threadPool_.empty(), "thread pool is not empty");
   threadPool_.resize(threadCnt_);
   for (size_t i = 0; i < threadCnt_; i++) {
+    // 每个线程都是执行Scheduler::run函数
     threadPool_[i].reset(new Thread(std::bind(&Scheduler::run, this), name_ + "_" + std::to_string(i)));
     threadIds_.push_back(threadPool_[i]->getId());
   }
@@ -80,7 +80,8 @@ void Scheduler::run() {
   }
 
   // 创建idle协程
-  Fiber::ptr idleFiber(new Fiber(std::bind(&Scheduler::idle, this)));
+  // Fiber::ptr idleFiber(new Fiber(std::bind(&Scheduler::idle, this)));
+  Fiber::ptr idleFiber = make_shared<Fiber>(std::bind(&Scheduler::idle, this));
   Fiber::ptr cbFiber;
 
   SchedulerTask task;
