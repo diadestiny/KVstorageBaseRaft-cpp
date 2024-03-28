@@ -35,8 +35,8 @@ class Fiber : public std::enable_shared_from_this<Fiber> {
 
   
   static void SetThis(Fiber *f); // 设置当前正在运行的协程
-  // 获取当前线程中的执行协程，如果当前线程没有创建协程，则创建第一个协程，
-  // 且该协程为当前线程的主协程，其他协程通过该协程来调度
+  
+  // 获取当前线程中的执行协程，如果当前线程没有创建协程，则创建第一个协程，且该协程为当前线程的主协程，其他协程通过该协程来调度
   static Fiber::ptr GetThis();
 
   static uint64_t TotalFiberNum();
