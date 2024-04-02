@@ -81,7 +81,7 @@ void Scheduler::run() {
 
   // 创建idle协程
   // Fiber::ptr idleFiber(new Fiber(std::bind(&Scheduler::idle, this)));
-  Fiber::ptr idleFiber = make_shared<Fiber>(std::bind(&Scheduler::idle, this));
+  Fiber::ptr idleFiber = std::make_shared<Fiber>(std::bind(&Scheduler::idle, this));
   Fiber::ptr cbFiber;
 
   SchedulerTask task;

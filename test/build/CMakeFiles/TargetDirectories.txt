@@ -1,0 +1,4 @@
+/data_ssd2/linkaihao/work_project/cpp_project/KVstorageBaseRaft-cpp/test/build/CMakeFiles/fiber_lib.dir
+/data_ssd2/linkaihao/work_project/cpp_project/KVstorageBaseRaft-cpp/test/build/CMakeFiles/test_tcp_server.dir
+/data_ssd2/linkaihao/work_project/cpp_project/KVstorageBaseRaft-cpp/test/build/CMakeFiles/edit_cache.dir
+/data_ssd2/linkaihao/work_project/cpp_project/KVstorageBaseRaft-cpp/test/build/CMakeFiles/rebuild_cache.dir
