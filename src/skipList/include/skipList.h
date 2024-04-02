@@ -1,16 +1,9 @@
 //
-// Created by swx on 24-1-5.
+// Created by lkh on 24-4-2.
 //
 
 #ifndef SKIPLIST_H
 #define SKIPLIST_H
-/* ************************************************************************
-> File Name:     skiplist.h
-> Author:        程序员Carl
-> 微信公众号:    代码随想录
-> Created Time:  Sun Dec  2 19:04:26 2018
-> Description:
- ************************************************************************/
 
 #include <cmath>
 #include <cstdlib>
@@ -39,7 +32,7 @@ class Node {
 
   void set_value(V);
 
-  // Linear array to hold pointers to next node of different level
+  // Linear array to hold pointers to next node of different level 相当于 *forward[N];
   Node<K, V> **forward;
 
   int node_level;
@@ -175,12 +168,11 @@ int SkipList<K, V>::insert_element(const K key, const V value) {
   _mtx.lock();
   Node<K, V> *current = this->_header;
 
-  // create update array and initialize it
-  // update is array which put node that the node->forward[i] should be operated later
+  // 初始化更新数组，用于跟踪每一层需要更新的节点
   Node<K, V> *update[_max_level + 1];
   memset(update, 0, sizeof(Node<K, V> *) * (_max_level + 1));
 
-  // start form highest level of skip list
+  // 向下遍历跳跃表以找到插入新元素的位置
   for (int i = _skip_list_level; i >= 0; i--) {
     while (current->forward[i] != NULL && current->forward[i]->get_key() < key) {
       current = current->forward[i];
@@ -188,34 +180,30 @@ int SkipList<K, V>::insert_element(const K key, const V value) {
     update[i] = current;
   }
 
-  // reached level 0 and forward pointer to right node, which is desired to insert key.
+  // 在第0层到达正确位置后，向右移动
   current = current->forward[0];
 
-  // if current node have key equal to searched key, we get it
+  // 如果当前节点的键等于要查找的键，则不插入重复键
   if (current != NULL && current->get_key() == key) {
     std::cout << "key: " << key << ", exists" << std::endl;
     _mtx.unlock();
     return 1;
   }
 
-  // if current is NULL that means we have reached to end of the level
-  // if current's key is not equal to key that means we have to insert node between update[0] and current node
   if (current == NULL || current->get_key() != key) {
-    // Generate a random level for node
+    // 为新节点生成一个随机级别
     int random_level = get_random_level();
 
-    // If random level is greater thar skip list's current level, initialize update value with pointer to header
+    // 如果随机级别大于跳跃表的当前级别，则初始化未使用的层指向头节点
     if (random_level > _skip_list_level) {
       for (int i = _skip_list_level + 1; i < random_level + 1; i++) {
         update[i] = _header;
       }
-      _skip_list_level = random_level;
+      _skip_list_level = random_level; // 更新跳跃表的最高级别
     }
 
-    // create new node with random level generated
     Node<K, V> *inserted_node = create_node(key, value, random_level);
 
-    // insert node
     for (int i = 0; i <= random_level; i++) {
       inserted_node->forward[i] = update[i]->forward[i];
       update[i]->forward[i] = inserted_node;
@@ -326,15 +314,14 @@ bool SkipList<K, V>::is_valid_string(const std::string &str) {
   return true;
 }
 
-// Delete element from skip list
 template <typename K, typename V>
 void SkipList<K, V>::delete_element(K key) {
   _mtx.lock();
   Node<K, V> *current = this->_header;
-  Node<K, V> *update[_max_level + 1];
+  Node<K, V> *update[_max_level + 1];  // 创建一个数组来保存需要更新的节点
   memset(update, 0, sizeof(Node<K, V> *) * (_max_level + 1));
 
-  // start from highest level of skip list
+  // 在每一层存储需要更新的节点
   for (int i = _skip_list_level; i >= 0; i--) {
     while (current->forward[i] != NULL && current->forward[i]->get_key() < key) {
       current = current->forward[i];
@@ -344,21 +331,20 @@ void SkipList<K, V>::delete_element(K key) {
 
   current = current->forward[0];
   if (current != NULL && current->get_key() == key) {
-    // start for lowest level and delete the current node of each level
+    // 从最低层开始，删除每一层的当前节点
     for (int i = 0; i <= _skip_list_level; i++) {
-      // if at level i, next node is not target node, break the loop.
+       // 如果在层i的下一个节点不是目标节点，中断循环
       if (update[i]->forward[i] != current) break;
-
       update[i]->forward[i] = current->forward[i];
     }
 
-    // Remove levels which have no elements
+    // 移除没有元素的层
     while (_skip_list_level > 0 && _header->forward[_skip_list_level] == 0) {
       _skip_list_level--;
     }
 
     std::cout << "Successfully deleted key " << key << std::endl;
-    delete current;
+    delete current; // 删除节点
     _element_count--;
   }
   _mtx.unlock();
@@ -403,17 +389,16 @@ bool SkipList<K, V>::search_element(K key, V &value) {
   std::cout << "search_element-----------------" << std::endl;
   Node<K, V> *current = _header;
 
-  // start from highest level of skip list
+  // 从最高层开始, 移动cur->forward[i]->get_key()<key, 往下层走
   for (int i = _skip_list_level; i >= 0; i--) {
     while (current->forward[i] && current->forward[i]->get_key() < key) {
       current = current->forward[i];
     }
   }
 
-  // reached level 0 and advance pointer to right node, which we search
+  // 移动到下一个节点，这可能是需要删除的节点
   current = current->forward[0];
 
-  // if current node have key equal to searched key, we get it
   if (current and current->get_key() == key) {
     value = current->get_value();
     std::cout << "Found key: " << key << ", value: " << current->get_value() << std::endl;
