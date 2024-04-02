@@ -1,1 +1,0 @@
-/usr/bin/c++ -rdynamic CMakeFiles/test_tcp_server.dir/test_tcp_server.o -o test_tcp_server   -L/data_ssd2/linkaihao/work_project/cpp_project/KVstorageBaseRaft-cpp/test/build  libfiber_lib.a -levent -ldl 
