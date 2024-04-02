@@ -1,5 +1,5 @@
 //
-// Created by henry on 24-1-23.
+// Updated by lkh on 24-1-23.
 //
 
 #ifndef KVRAFTCPP_DEFER_H
@@ -12,7 +12,7 @@ class Defer {
  public:
   Defer(F&& f) : m_func(std::forward<F>(f)) {}
   Defer(const F& f) : m_func(f) {}
-  ~Defer() { m_func(); }
+  ~Defer() { m_func(); } //析构函数执行m_func是实现延迟的关键
 
   Defer(const Defer& e) = delete;
   Defer& operator=(const Defer& e) = delete;
