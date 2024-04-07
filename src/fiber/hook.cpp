@@ -38,14 +38,12 @@ void hook_init() {
   if (is_inited) {
     return;
   }
-  // dlsym:Dynamic LinKinf Library.返回指定符号的地址
+  // dlsym(Dynamic LinKinf Library): 一种在动态链接库中查找符号(函数、变量等)地址的方法
 #define XX(name) name##_f = (name##_fun)dlsym(RTLD_NEXT, #name);
   HOOK_FUN(XX);
 #undef XX
 }
 
-// hook_init放在静态对象中，则在main函数执行之前就会获取各个符号地址并
-// 保存到全局变量中
 static uint64_t s_connect_timeout = -1;
 struct _HOOKIniter {
   _HOOKIniter() {
@@ -54,6 +52,8 @@ struct _HOOKIniter {
     // std::cout << "hook init success" << std::endl;
   }
 };
+
+// hook_init放在静态对象中，则在main函数执行之前就会获取各个符号地址并保存到全局变量中
 static _HOOKIniter s_hook_initer;
 
 bool is_hook_enable() { return t_hook_enable; }

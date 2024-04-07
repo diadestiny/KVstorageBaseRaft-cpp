@@ -265,9 +265,6 @@ void Raft::doHeartBeat() {
       myAssert(m_nextIndex[i] >= 1, format("rf.nextIndex[%d] = {%d}", i, m_nextIndex[i]));
       //日志压缩加入后要判断是发送快照还是发送AE
       if (m_nextIndex[i] <= m_lastSnapshotIncludeIndex) {
-        //                        DPrintf("[func-ticker()-rf{%v}]rf.nextIndex[%v] {%v} <=
-        //                        rf.lastSnapshotIncludeIndex{%v},so leaderSendSnapShot", rf.me, i, rf.nextIndex[i],
-        //                        rf.lastSnapshotIncludeIndex)
         //改发送的日志已经被做成快照，必须发送快照了
         std::thread t(&Raft::leaderSendSnapShot, this, i);  // 创建新线程并执行b函数，并传递参数
         t.detach();
@@ -486,6 +483,7 @@ void Raft::InstallSnapshot(const raftRpcProctoc::InstallSnapshotRequest* args,
 
 void Raft::pushMsgToKvServer(ApplyMsg msg) { applyChan->Push(msg); }
 
+// leader定时给follower节点发送AE
 void Raft::leaderHearBeatTicker() {
   while (true) {
     //不是leader的话就没有必要进行后续操作，况且还要拿锁，很影响性能，目前是睡眠，后面再优化优化
